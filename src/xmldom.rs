@@ -111,7 +111,8 @@ pub fn parse_document(xml: &str) -> Result<Element, String> {
             }
             Ok(Event::Text(text)) => {
                 let raw = text.decode().map_err(|error| error.to_string())?;
-                let decoded = quick_xml::escape::unescape(&raw).map_err(|error| error.to_string())?;
+                let decoded =
+                    quick_xml::escape::unescape(&raw).map_err(|error| error.to_string())?;
                 append_text(&mut stack, &decoded);
             }
             Ok(Event::CData(data)) => {
