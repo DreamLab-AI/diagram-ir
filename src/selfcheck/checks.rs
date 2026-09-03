@@ -27,12 +27,16 @@ fn ascii_decimal(value: &str) -> bool {
 
 /// `canonical_controller`.
 pub fn canonical_controller(template: &str, template_display: &str) -> Result<String, String> {
-    let source = std::fs::read_to_string(template).map_err(|_| {
-        format!(
-            "cannot find the canonical controller at {template_display}; \
+    let source = if template == super::BUNDLED_MOTION_TEMPLATE_PATH {
+        super::BUNDLED_MOTION_TEMPLATE.to_string()
+    } else {
+        std::fs::read_to_string(template).map_err(|_| {
+            format!(
+                "cannot find the canonical controller at {template_display}; \
 pass --motion-template or set DIAGRAM_DESIGN_SKILL_DIR to the diagram-design skill"
-        )
-    })?;
+            )
+        })?
+    };
     let source = source.replace("\r\n", "\n").replace('\r', "\n");
     let parser = parse(&source);
     if parser.scripts.len() != 1 || !parser.scripts[0].closed {

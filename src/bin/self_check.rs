@@ -27,7 +27,7 @@ struct Args {
     files: Vec<String>,
     /// path to the canonical `template-motion.html`; otherwise
     /// `$DIAGRAM_DESIGN_SKILL_DIR/assets/`, the installed skill, then
-    /// `./skills/diagram-design/assets/`
+    /// `./skills/diagram-design/assets/`, then the copy compiled into the binary
     #[arg(long = "motion-template")]
     motion_template: Option<String>,
 }

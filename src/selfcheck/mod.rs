@@ -8,9 +8,21 @@ pub mod refs;
 
 use std::path::PathBuf;
 
+/// The canonical motion controller, compiled into the crate from
+/// `assets/template-motion.html` so a standalone binary needs no skill checkout.
+/// An installed diagram-design skill can still override it (see
+/// [`resolve_motion_template`]); the two are expected to be byte-identical.
+pub const BUNDLED_MOTION_TEMPLATE: &str = include_str!("../../assets/template-motion.html");
+
+/// The pseudo-path [`resolve_motion_template`] returns when no template exists
+/// on disk. [`checks::canonical_controller`] recognises it and reads
+/// [`BUNDLED_MOTION_TEMPLATE`] instead of the filesystem.
+pub const BUNDLED_MOTION_TEMPLATE_PATH: &str = "<bundled>/assets/template-motion.html";
+
 /// Where the canonical motion controller lives. The binary no longer sits
 /// inside the skill, so the template is located by flag, then environment, then
-/// the installed and in-repo locations, in that order.
+/// the installed and in-repo locations, and finally the copy compiled into this
+/// crate ([`BUNDLED_MOTION_TEMPLATE`]).
 pub fn resolve_motion_template(explicit: Option<&str>) -> PathBuf {
     if let Some(explicit) = explicit {
         return PathBuf::from(explicit);
@@ -36,5 +48,5 @@ pub fn resolve_motion_template(explicit: Option<&str>) -> PathBuf {
             return candidate.clone();
         }
     }
-    candidates.pop().expect("the candidate list is never empty")
+    PathBuf::from(BUNDLED_MOTION_TEMPLATE_PATH)
 }

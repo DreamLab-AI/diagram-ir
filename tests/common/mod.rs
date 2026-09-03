@@ -78,5 +78,5 @@ pub fn mermaid_output(name: &str, selector: Option<&str>, json: bool, max_rows: 
 }
 
 pub fn motion_template() -> String {
-    "../../skills/diagram-design/assets/template-motion.html".to_string()
+    concat!(env!("CARGO_MANIFEST_DIR"), "/assets/template-motion.html").to_string()
 }

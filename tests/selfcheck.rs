@@ -360,3 +360,27 @@ fn the_template_resolver_prefers_an_explicit_path() {
         "{resolved:?}"
     );
 }
+
+#[test]
+fn the_bundled_template_is_the_last_resort_and_matches_the_asset() {
+    use diagram_ir::selfcheck::{BUNDLED_MOTION_TEMPLATE, BUNDLED_MOTION_TEMPLATE_PATH};
+    assert_eq!(
+        BUNDLED_MOTION_TEMPLATE,
+        std::fs::read_to_string(motion_template()).unwrap()
+    );
+    let bundled = canonical_controller(BUNDLED_MOTION_TEMPLATE_PATH, BUNDLED_MOTION_TEMPLATE_PATH)
+        .expect("the bundled controller parses");
+    let on_disk = canonical_controller(&motion_template(), &motion_template()).unwrap();
+    assert_eq!(bundled, on_disk);
+    // With no skill checkout anywhere near the working directory, a compliant
+    // file still passes against the bundled controller.
+    let source = std::fs::read_to_string("tests/fixtures/selfcheck/motion-step-ok.html").unwrap();
+    assert_eq!(
+        verify(
+            &source,
+            BUNDLED_MOTION_TEMPLATE_PATH,
+            BUNDLED_MOTION_TEMPLATE_PATH
+        ),
+        Vec::<String>::new()
+    );
+}
