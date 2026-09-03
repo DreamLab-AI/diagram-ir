@@ -30,7 +30,7 @@ clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 regex = "1"
-quick-xml = "0.37"
+quick-xml = "0.41"
 flate2 = "1"
 base64 = "0.22"
 

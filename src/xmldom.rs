@@ -110,7 +110,8 @@ pub fn parse_document(xml: &str) -> Result<Element, String> {
                 push_child(&mut stack, &mut root, element)?;
             }
             Ok(Event::Text(text)) => {
-                let decoded = text.unescape().map_err(|error| error.to_string())?;
+                let raw = text.decode().map_err(|error| error.to_string())?;
+                let decoded = quick_xml::escape::unescape(&raw).map_err(|error| error.to_string())?;
                 append_text(&mut stack, &decoded);
             }
             Ok(Event::CData(data)) => {
@@ -134,7 +135,7 @@ fn element_from_start(start: &quick_xml::events::BytesStart<'_>) -> Result<Eleme
         let attribute = attribute.map_err(|error| error.to_string())?;
         let key = String::from_utf8_lossy(attribute.key.as_ref()).into_owned();
         let value = attribute
-            .unescape_value()
+            .normalized_value(quick_xml::XmlVersion::Implicit1_0)
             .map_err(|error| error.to_string())?
             .into_owned();
         attrs.push((key, value));
