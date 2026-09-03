@@ -1,3 +1,6 @@
 target/
 *.orig
 *.rej
+
+# Session state written by agent tooling hooks; never part of the crate
+.claude-flow/
