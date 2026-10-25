@@ -13,6 +13,7 @@ pub mod markdown;
 pub mod mermaid;
 pub mod pyfmt;
 pub mod selfcheck;
+pub mod semantic_review;
 pub mod xmldom;
 
 /// A fatal, user-facing condition. The binaries print it behind their own

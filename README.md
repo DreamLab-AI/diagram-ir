@@ -63,6 +63,7 @@ diagram without ever evaluating the source format.
 | `markdown` | Locate fenced Mermaid blocks inside a Markdown file |
 | `pyfmt` | Python format-string interpolation for template variables |
 | `xmldom` | Minimal DOM over quick-xml events, with attribute and depth limits |
+| `semantic_review` | Optional Jev option: builds System One question sets from IR claims plus caller-supplied evidence, behind a `SupportJudge` trait with a deterministic "not judged" default. No I/O |
 | `entities` | HTML entity resolution without pulling in a full HTML parser |
 
 ### Trust boundary
@@ -147,6 +148,40 @@ diagram-self-check output.html
   equivalent IR
 - Self-check: the accessible-diagram contract rules
 - Lexer and grammar coverage for each Mermaid kind
+
+## Jev option (opt-in semantic support review)
+
+`diagram_ir::semantic_review` lets a consumer ask whether the source evidence actually
+supports an extracted claim: an edge's direction, an edge's label, or a node's grouping.
+It complements the syntactic self-check; it does not replace or certify it. Status:
+*proposed research candidate; no measured uplift*; the wiring and fallback tests do not
+show uplift.
+
+- **What leaves:** nothing, from this crate. It has no network code and adds no dependency.
+  A host that implements `SupportJudge` (or passes a transport closure to `JsonJudge`) sends,
+  per claim, the diagram's node labels (at most 40, 120 chars each), the claim, and the
+  caller-chosen evidence excerpt (at most 2,000 chars) to whatever endpoint the host picks.
+  Hosts handling private material should use a local endpoint.
+- **Flag:** there is no flag in the library; the default judge `NotJudged` **is** the off
+  state. It builds no request and every claim comes back `NotJudged(FlagOff)`. Off by default.
+- **Wire:** independent `noul` questions (`direction`, `label`, `grouping`) plus one `score`
+  question (`support`, an ordered four-level rubric). Question set `diagram-ir.di-01-s1-01.v1`.
+- **Fallback:** a missing endpoint, timeout, transport error, non-2xx, malformed body, missing
+  answer ID or out-of-range value, or a verdict below `ReviewPolicy::min_confidence` all give
+  `NotJudged(<reason>)` (`no-endpoint`, `timeout`, `transport`, `http-<code>`, `malformed`,
+  `low-confidence`), which is equivalent to the default review. Extraction output is never
+  modified. With `ReviewPolicy::default()` nothing is flagged: a threshold must be fitted on
+  labelled data (seeded reversed-edge and mislabelling cases) first.
+
+```rust
+use diagram_ir::semantic_review::{review_claims, Claim, Evidence, NotJudged, Scope};
+
+let scope = Scope::new("d1", "flowchart", vec!["Gateway".into(), "Queue".into()]);
+let claim = Claim::edge("e1", "Gateway", "Queue", "enqueue", true);
+let evidence = Evidence::new("README.md#flow", "The gateway enqueues each request.");
+let review = review_claims(&NotJudged, &scope, vec![(claim, evidence)]);
+assert!(review.items()[0].judgement().verdict().is_none());
+```
 
 ## What it does not do
 
