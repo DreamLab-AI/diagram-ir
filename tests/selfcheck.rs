@@ -406,8 +406,5 @@ fn a_relative_skill_dir_override_is_ignored() {
     std::env::set_var("DIAGRAM_DESIGN_SKILL_DIR", "relative/skill");
     let candidates = motion_template_candidates();
     std::env::remove_var("DIAGRAM_DESIGN_SKILL_DIR");
-    assert!(
-        candidates.iter().all(|c| c.is_absolute()),
-        "{candidates:?}"
-    );
+    assert!(candidates.iter().all(|c| c.is_absolute()), "{candidates:?}");
 }
