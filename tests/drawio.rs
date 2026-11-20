@@ -13,7 +13,9 @@ use diagram_ir::drawio::decode::{
     decompress_limited, inflate, percent_decode, png_embedded_xml, svg_embedded_xml, DecodeError,
     Wrapper, MAX_XML_BYTES,
 };
-use diagram_ir::drawio::model::{load_mxfile, parse_file, Node, Page};
+use diagram_ir::drawio::model::{
+    load_mxfile, parse_file, parse_file_with_limits, Limits, Node, Page, DEFAULT_MAX_CELLS_PER_PAGE,
+};
 use diagram_ir::drawio::style::{classify_shape, clean_label, parse_style, shape_family};
 
 const MODEL: &str = concat!(
@@ -473,4 +475,106 @@ fn text_shapes_are_not_drawable() {
     let info = analyse(&pages[0]);
     assert_eq!(info.nodes_total, 12);
     assert_eq!(info.nodes_drawable, 11, "the floating caption is excluded");
+}
+
+/// A model with `cells` vertices and no edges.
+fn model_with_cells(cells: usize) -> String {
+    let mut model =
+        String::from(r#"<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/>"#);
+    for index in 0..cells {
+        model.push_str(&format!(
+            r#"<mxCell id="v{index}" value="n" vertex="1" parent="1"><mxGeometry x="0" y="0" width="10" height="10" as="geometry"/></mxCell>"#
+        ));
+    }
+    model.push_str("</root></mxGraphModel>");
+    model
+}
+
+#[test]
+fn a_page_over_the_cell_cap_is_refused_not_truncated() {
+    // COV-A-F2: no node/edge cap existed.
+    let limits = Limits {
+        max_cells_per_page: 50,
+        ..Limits::default()
+    };
+    let xml = format!(
+        r#"<mxfile><diagram id="p">{}</diagram></mxfile>"#,
+        model_with_cells(60)
+    );
+    let error = parse_file_with_limits("big.drawio", &xml, &limits).unwrap_err();
+    assert!(error.0.contains("more than 50 cells"), "{}", error.0);
+    // Exactly at the cap (2 structural cells + 48 vertices) still parses.
+    let xml = format!(
+        r#"<mxfile><diagram id="p">{}</diagram></mxfile>"#,
+        model_with_cells(48)
+    );
+    let pages = parse_file_with_limits("ok.drawio", &xml, &limits).expect("at the cap parses");
+    assert_eq!(pages[0].nodes.len(), 48);
+}
+
+#[test]
+fn the_default_cell_cap_applies_to_parse_file() {
+    let xml = format!(
+        r#"<mxfile><diagram id="p">{}</diagram></mxfile>"#,
+        model_with_cells(DEFAULT_MAX_CELLS_PER_PAGE + 1)
+    );
+    let error = parse_file("huge.drawio", &xml).unwrap_err();
+    assert!(error.0.contains("cells"), "{}", error.0);
+}
+
+#[test]
+fn cells_are_capped_across_pages_in_total() {
+    let limits = Limits {
+        max_total_cells: 100,
+        ..Limits::default()
+    };
+    let page = |id: &str| format!(r#"<diagram id="{id}">{}</diagram>"#, model_with_cells(40));
+    let xml = format!("<mxfile>{}{}{}</mxfile>", page("a"), page("b"), page("c"));
+    let error = parse_file_with_limits("many.drawio", &xml, &limits).unwrap_err();
+    assert!(error.0.contains("cells in the file"), "{}", error.0);
+}
+
+#[test]
+fn the_page_count_is_capped() {
+    let limits = Limits {
+        max_pages: 2,
+        ..Limits::default()
+    };
+    let page = |id: &str| format!(r#"<diagram id="{id}">{MODEL}</diagram>"#);
+    let xml = format!("<mxfile>{}{}{}</mxfile>", page("a"), page("b"), page("c"));
+    let error = parse_file_with_limits("pages.drawio", &xml, &limits).unwrap_err();
+    assert!(
+        error.0.contains("3 pages exceeds the 2 page limit"),
+        "{}",
+        error.0
+    );
+    let xml = format!("<mxfile>{}{}</mxfile>", page("a"), page("b"));
+    assert_eq!(
+        parse_file_with_limits("two.drawio", &xml, &limits)
+            .unwrap()
+            .len(),
+        2
+    );
+}
+
+#[test]
+fn inflated_bytes_are_capped_across_compressed_pages() {
+    // Each page inflates well under the per-page cap; together they exceed the total.
+    let payload = drawio_payload(&model_with_cells(200));
+    let one_page = model_with_cells(200).len();
+    let limits = Limits {
+        max_total_xml_bytes: one_page * 2 + one_page / 2,
+        ..Limits::default()
+    };
+    let page = |id: &str| format!(r#"<diagram id="{id}">{payload}</diagram>"#);
+    let three = format!("<mxfile>{}{}{}</mxfile>", page("a"), page("b"), page("c"));
+    let error = parse_file_with_limits("packed.drawio", &three, &limits).unwrap_err();
+    assert!(error.0.contains("total limit"), "{}", error.0);
+    let two = format!("<mxfile>{}{}</mxfile>", page("a"), page("b"));
+    assert_eq!(
+        parse_file_with_limits("packed2.drawio", &two, &limits)
+            .unwrap()
+            .len(),
+        2
+    );
 }

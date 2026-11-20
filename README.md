@@ -75,6 +75,10 @@ diagram without ever evaluating the source format.
 | Max edges | 5,000 |
 | XML attributes per element | Bounded by xmldom |
 | XML nesting depth | Bounded by xmldom |
+| draw.io input file | 32 MiB |
+| draw.io inflated bytes, one page / whole file | 64 MiB / 128 MiB (`Limits::max_total_xml_bytes`) |
+| draw.io cells, one page / whole file | 100,000 / 250,000 (`Limits`) |
+| draw.io pages per file | 256 |
 
 All limits are hard: exceeding one is a `Fail`, not a silent truncation.
 

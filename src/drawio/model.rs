@@ -100,8 +100,66 @@ struct RawCell {
     value: String,
 }
 
-/// `parse_page`.
+/// Whole-file resource limits for draw.io parsing (COV-A-F2).
+///
+/// `MAX_XML_BYTES` bounds one inflated page, but a file with many pages, or one
+/// page with a very large cell table, previously had no overall bound: memory
+/// grew with `pages x 64 MiB` and with the number of cells. These limits apply
+/// to one [`parse_file_with_limits`] call as a whole.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Limits {
+    /// Most `<diagram>` pages one file may hold.
+    pub max_pages: usize,
+    /// Most cells (vertices, edges, groups and edge labels, counted before
+    /// folding) one page may hold.
+    pub max_cells_per_page: usize,
+    /// Most cells across every page of one file.
+    pub max_total_cells: usize,
+    /// Most inflated payload bytes summed across every compressed page.
+    pub max_total_xml_bytes: usize,
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        Limits {
+            max_pages: DEFAULT_MAX_PAGES,
+            max_cells_per_page: DEFAULT_MAX_CELLS_PER_PAGE,
+            max_total_cells: DEFAULT_MAX_TOTAL_CELLS,
+            max_total_xml_bytes: DEFAULT_MAX_TOTAL_XML_BYTES,
+        }
+    }
+}
+
+/// Default for [`Limits::max_pages`].
+pub const DEFAULT_MAX_PAGES: usize = 256;
+/// Default for [`Limits::max_cells_per_page`]: far above any diagram a person
+/// draws or reads, well below what exhausts memory.
+pub const DEFAULT_MAX_CELLS_PER_PAGE: usize = 100_000;
+/// Default for [`Limits::max_total_cells`].
+pub const DEFAULT_MAX_TOTAL_CELLS: usize = 250_000;
+/// Default for [`Limits::max_total_xml_bytes`]: two pages' worth at the
+/// per-page cap.
+pub const DEFAULT_MAX_TOTAL_XML_BYTES: usize = 2 * MAX_XML_BYTES;
+
+/// Running totals for one file, checked against [`Limits`].
+#[derive(Debug, Default)]
+struct Budget {
+    xml_bytes: usize,
+    cells: usize,
+}
+
+/// `parse_page`, under the default [`Limits`].
 pub fn parse_page(diagram: &Element, index: i64) -> Failable<Page> {
+    parse_page_budgeted(diagram, index, &Limits::default(), &mut Budget::default())
+}
+
+/// `parse_page` charging a shared [`Budget`].
+fn parse_page_budgeted(
+    diagram: &Element,
+    index: i64,
+    limits: &Limits,
+    budget: &mut Budget,
+) -> Failable<Page> {
     let name = match diagram.get("name") {
         Some(name) if !name.is_empty() => name.to_string(),
         _ => format!("Page-{}", index + 1),
@@ -129,6 +187,13 @@ pub fn parse_page(diagram: &Element, index: i64) -> Failable<Page> {
             let Some(inflated) = inflated else {
                 return Ok(page);
             };
+            budget.xml_bytes = budget.xml_bytes.saturating_add(inflated.len());
+            if budget.xml_bytes > limits.max_total_xml_bytes {
+                return Err(Fail::new(format!(
+                    "page {index}: decoded pages exceed the {} MiB total limit",
+                    limits.max_total_xml_bytes / (1024 * 1024)
+                )));
+            }
             reject_unsafe_xml(&inflated, &format!("page {index}"))?;
             let parsed = parse_document(&inflated)
                 .map_err(|error| Fail::new(format!("page {index}: malformed XML ({error})")))?;
@@ -184,6 +249,19 @@ pub fn parse_page(diagram: &Element, index: i64) -> Failable<Page> {
         };
         if cid.is_empty() {
             continue;
+        }
+        budget.cells += 1;
+        if order.len() >= limits.max_cells_per_page {
+            return Err(Fail::new(format!(
+                "page {index}: more than {} cells",
+                limits.max_cells_per_page
+            )));
+        }
+        if budget.cells > limits.max_total_cells {
+            return Err(Fail::new(format!(
+                "page {index}: more than {} cells in the file",
+                limits.max_total_cells
+            )));
         }
         raw.insert(cid.clone(), RawCell { cell, attrs, value });
         order.push(cid);
@@ -390,8 +468,15 @@ fn resolve_geometry(page: &mut Page) {
     }
 }
 
-/// `parse_file`.
+/// `parse_file`, under the default [`Limits`].
 pub fn parse_file(path: &str, xml: &str) -> Failable<Vec<Page>> {
+    parse_file_with_limits(path, xml, &Limits::default())
+}
+
+/// `parse_file` under explicit [`Limits`]. Exceeding any limit is an error, never
+/// a truncated result.
+pub fn parse_file_with_limits(path: &str, xml: &str, limits: &Limits) -> Failable<Vec<Page>> {
+    let mut budget = Budget::default();
     let file_name = crate::pyfmt::path_name(path);
     reject_unsafe_xml(xml, &file_name)?;
     let root = parse_document(xml)
@@ -403,7 +488,7 @@ pub fn parse_file(path: &str, xml: &str) -> Failable<Vec<Page>> {
             .push(("name".to_string(), crate::pyfmt::path_stem(path)));
         wrapper.attrs.push(("id".to_string(), "single".to_string()));
         wrapper.children.push(root);
-        return Ok(vec![parse_page(&wrapper, 0)?]);
+        return Ok(vec![parse_page_budgeted(&wrapper, 0, limits, &mut budget)?]);
     }
     let diagrams = root.find_all_descendants("diagram");
     if diagrams.is_empty() {
@@ -411,9 +496,21 @@ pub fn parse_file(path: &str, xml: &str) -> Failable<Vec<Page>> {
             "{file_name}: mxfile contains no <diagram> pages"
         )));
     }
+    if diagrams.len() > limits.max_pages {
+        return Err(Fail::new(format!(
+            "{file_name}: {} pages exceeds the {} page limit",
+            diagrams.len(),
+            limits.max_pages
+        )));
+    }
     let mut pages = Vec::new();
     for (index, diagram) in diagrams.into_iter().enumerate() {
-        pages.push(parse_page(diagram, index as i64)?);
+        pages.push(parse_page_budgeted(
+            diagram,
+            index as i64,
+            limits,
+            &mut budget,
+        )?);
     }
     Ok(pages)
 }
