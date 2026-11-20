@@ -25,9 +25,9 @@ struct Args {
     /// HTML files to check
     #[arg(required = true, num_args = 1..)]
     files: Vec<String>,
-    /// path to the canonical `template-motion.html`; otherwise
-    /// `$DIAGRAM_DESIGN_SKILL_DIR/assets/`, the installed skill, then
-    /// `./skills/diagram-design/assets/`, then the copy compiled into the binary
+    /// path to the canonical `template-motion.html`; otherwise an absolute
+    /// `$DIAGRAM_DESIGN_SKILL_DIR/assets/`, the installed skill, then the copy
+    /// compiled into the binary (never a path relative to the working directory)
     #[arg(long = "motion-template")]
     motion_template: Option<String>,
 }

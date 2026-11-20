@@ -111,11 +111,14 @@ diagram-self-check [OPTIONS] <FILES>...
 ```
 
 The canonical motion controller is resolved in this order: `--motion-template`,
-`$DIAGRAM_DESIGN_SKILL_DIR/assets/template-motion.html`, the installed skill at
-`/opt/agentbox/skills/diagram-design/assets/`, `./skills/diagram-design/assets/`,
-and finally the copy compiled into the binary from `assets/template-motion.html`.
-A standalone install therefore needs no skill checkout; an installed skill wins
-when present so a repository can pin its own controller.
+an absolute `$DIAGRAM_DESIGN_SKILL_DIR/assets/template-motion.html` (a relative
+value is ignored), the installed skill at
+`/opt/agentbox/skills/diagram-design/assets/`, and finally the copy compiled into
+the binary from `assets/template-motion.html`. Nothing is resolved against the
+working directory, so a file planted in the directory the tool runs from cannot
+stand in for the canonical controller. A standalone install needs no skill
+checkout; an installed skill wins when present so a deployment can pin its own
+controller.
 
 Exit codes: **0** every file passes, **1** at least one file fails the contract (each failure is listed), **2** tool error.
 

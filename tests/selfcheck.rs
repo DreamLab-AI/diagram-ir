@@ -384,3 +384,30 @@ fn the_bundled_template_is_the_last_resort_and_matches_the_asset() {
         Vec::<String>::new()
     );
 }
+
+#[test]
+fn no_template_candidate_is_resolved_against_the_working_directory() {
+    // COV-A-F6: a `./skills/diagram-design/...` candidate would let a file in
+    // whichever directory the tool is run from stand in for the canonical
+    // controller. Every on-disk candidate must be absolute.
+    use diagram_ir::selfcheck::motion_template_candidates;
+    let candidates = motion_template_candidates();
+    assert!(!candidates.is_empty());
+    for candidate in &candidates {
+        assert!(candidate.is_absolute(), "{candidate:?} is cwd-relative");
+    }
+}
+
+#[test]
+fn a_relative_skill_dir_override_is_ignored() {
+    use diagram_ir::selfcheck::motion_template_candidates;
+    // Distinct from every other test in this binary: it is the only one that
+    // touches the variable.
+    std::env::set_var("DIAGRAM_DESIGN_SKILL_DIR", "relative/skill");
+    let candidates = motion_template_candidates();
+    std::env::remove_var("DIAGRAM_DESIGN_SKILL_DIR");
+    assert!(
+        candidates.iter().all(|c| c.is_absolute()),
+        "{candidates:?}"
+    );
+}
